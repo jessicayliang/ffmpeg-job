@@ -35,7 +35,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.post("/clip")
 async def clip_video(req: ClipRequest):
-    email = check_allowed(request)
+    email = check_allowed(req)
     logger.info(f"Received clip request: drive_url={req.drive_url!r}, {len(req.clips)} clip(s)")
 
     try:
