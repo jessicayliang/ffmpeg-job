@@ -7,7 +7,8 @@ import uuid
 import zipfile
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from helpers.auth import check_allowed
 from helpers.cache import cache_stats, clear_cache, get_cached, save_to_cache
@@ -23,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Video Clipper API")
 
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/")
+def index():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
@@ -34,8 +43,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 @app.post("/clip")
-async def clip_video(req: ClipRequest):
-    email = check_allowed(req)
+async def clip_video(request: Request, req: ClipRequest):
+    email = check_allowed(request)
     logger.info(f"Received clip request: drive_url={req.drive_url!r}, {len(req.clips)} clip(s)")
 
     try:

@@ -1,9 +1,9 @@
-import base64
-import json
 import logging
 import os
 
+import requests
 from fastapi import HTTPException, Request
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,23 +18,29 @@ else:
     logger.warning("ALLOWED_EMAILS is not set — no email restrictions will be enforced")
 
 
-def _get_caller_email(request: Request) -> str | None:
-    """Extract the caller's email from the Cloud Run-injected identity token.
-
-    Cloud Run forwards the verified token in the X-Forwarded-Authorization header.
-    The token is a JWT — we just base64-decode the payload, no signature verification
-    needed since Cloud Run already verified it before the request reached us.
-    """
-    auth = request.headers.get("X-Forwarded-Authorization") or request.headers.get("Authorization")
+def _get_caller_email(request: Request) -> Optional[str]:
+    """Verify the Bearer token with Google and return the associated email."""
+    auth = request.headers.get("Authorization") or request.headers.get("X-Forwarded-Authorization")
     if not auth or not auth.startswith("Bearer "):
         return None
     token = auth.removeprefix("Bearer ")
+
+    # Verify with Google's tokeninfo endpoint
     try:
-        payload_b64 = token.split(".")[1]
-        payload_b64 += "=" * (-len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        return payload.get("email", "").lower()
-    except Exception:
+        resp = requests.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"access_token": token},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"Token verification failed: {resp.status_code} {resp.text}")
+            return None
+        data = resp.json()
+        email = data.get("email", "").lower()
+        logger.info(f"Verified token for email: {email}")
+        return email or None
+    except Exception as e:
+        logger.error(f"Token verification error: {e}")
         return None
 
 
