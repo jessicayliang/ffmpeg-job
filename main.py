@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 import os
 import tempfile
@@ -41,11 +42,19 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"detail": f"Internal server error: {type(exc).__name__}: {exc}"},
     )
 
+def _extract_token(request: Request) -> str:
+    """Pull the Bearer token from the Authorization header."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header.")
+    return auth.removeprefix("Bearer ")
+
 
 @app.post("/clip")
 async def clip_video(request: Request, req: ClipRequest):
     email = check_allowed(request)
-    logger.info(f"Received clip request: drive_url={req.drive_url!r}, {len(req.clips)} clip(s)")
+    user_token = _extract_token(request)
+    logger.info(f"Clip request from {email}: drive_url={req.drive_url!r}, {len(req.clips)} clip(s)")
 
     try:
         file_id = extract_file_id(req.drive_url)
@@ -62,7 +71,7 @@ async def clip_video(request: Request, req: ClipRequest):
         if input_path is None:
             input_path = os.path.join(tmpdir, f"input_{job_id}.mp4")
             try:
-                download_video(file_id, input_path)
+                download_video(file_id, input_path, user_token)
             except PermissionError as e:
                 raise HTTPException(status_code=403, detail=str(e))
             except Exception as e:
@@ -121,11 +130,11 @@ def health():
 
 @app.get("/cache")
 def get_cache_stats(request: Request):
-    email = check_allowed(request)
+    check_allowed(request)
     return cache_stats()
 
 
 @app.delete("/cache")
 def delete_cache(request: Request):
-    email = check_allowed(request)
+    check_allowed(request)
     return clear_cache()
