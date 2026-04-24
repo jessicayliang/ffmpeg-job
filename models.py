@@ -20,5 +20,6 @@ class Clip(BaseModel):
 
 
 class ClipRequest(BaseModel):
-    drive_url: str    # Public Google Drive share URL
-    clips: list[Clip] # One or more time ranges
+    drive_url: str        # Public Google Drive share URL
+    clips: list[Clip]     # One or more time ranges
+    job_id: Optional[str] = None  # Client-generated ID for SSE progress tracking

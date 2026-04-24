@@ -1,18 +1,18 @@
 import logging
-import os
 import re
+import subprocess
 
+import requests
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 
 logger = logging.getLogger(__name__)
 
 
 def _get_drive_service(user_token: str):
-    """Build a Drive API client using the user's own OAuth access token."""
     creds = Credentials(token=user_token)
     return build("drive", "v3", credentials=creds)
+
 
 def extract_file_id(drive_url: str) -> str:
     """Pull the file ID from various Google Drive URL formats."""
@@ -28,27 +28,62 @@ def extract_file_id(drive_url: str) -> str:
     raise ValueError(f"Could not extract file ID from URL: {drive_url}")
 
 
-def download_video(file_id: str, dest_path: str, user_token: str) -> None:
-    """Download a Drive file using the user's own access token."""
-    logger.info(f"Downloading file_id={file_id} using user token")
+def get_file_meta(file_id: str, user_token: str) -> dict:
+    """Return file metadata (name, size, mimeType). Raises PermissionError if inaccessible."""
     service = _get_drive_service(user_token)
-
     try:
-        meta = service.files().get(fileId=file_id, fields="name,size,mimeType",supportsAllDrives=True).execute()
+        meta = service.files().get(
+            fileId=file_id,
+            fields="name,size,mimeType",
+            supportsAllDrives=True,
+        ).execute()
         logger.info(f"File: name={meta.get('name')!r} size={meta.get('size')} mimeType={meta.get('mimeType')}")
+        return meta
     except Exception as e:
         raise PermissionError(
             f"Could not access file_id={file_id}. "
             f"Make sure you have access to this file in your Google Drive. ({e})"
         )
 
-    request = service.files().get_media(fileId=file_id,supportsAllDrives=True)
-    with open(dest_path, "wb") as f:
-        downloader = MediaIoBaseDownload(f, request, chunksize=32 * 1024 * 1024)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            logger.info(f"Download progress: {int(status.progress() * 100)}%")
 
-    size_mb = os.path.getsize(dest_path) / 1e6
-    logger.info(f"Download complete: {dest_path} ({size_mb:.1f} MB)")
+def drive_direct_url(file_id: str) -> str:
+    """Return the direct media download URL for a Drive file."""
+    return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&supportsAllDrives=true"
+
+
+def clip_from_drive(
+        file_id: str,
+        user_token: str,
+        output_path: str,
+        start_seconds: float,
+        duration_seconds: float,
+) -> None:
+    """
+    Cut a clip directly from a Google Drive file without downloading it first.
+
+    FFmpeg reads the file over HTTPS using the user's Bearer token, seeking to
+    the right position. For container formats that support it (MP4, MKV) FFmpeg
+    will only fetch the bytes it actually needs.
+    """
+    url = drive_direct_url(file_id)
+
+    cmd = [
+        "ffmpeg", "-y",
+        # Pass the auth header so Drive accepts the request
+        "-headers", f"Authorization: Bearer {user_token}\r\n",
+        # Seek before opening — much faster for large files
+        "-ss", str(start_seconds),
+        "-i", url,
+        "-t", str(duration_seconds),
+        "-c", "copy",
+        output_path,
+    ]
+
+    logger.info(f"Clipping directly from Drive: ss={start_seconds}s t={duration_seconds}s -> {output_path}")
+    logger.info(f"Running: {' '.join(cmd[:6])} ... {output_path}")
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg error:\n{result.stderr[-3000:]}")
+
+    logger.info(f"Clip complete: {output_path}")

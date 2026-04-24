@@ -39,16 +39,12 @@ def run_ffmpeg_clip(input_path: str, output_path: str, start: str, end: str) -> 
     logger.info(f"Clip: {start} → {end} = {duration_sec:.3f}s")
 
     cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
+        "ffmpeg",
+        "-y",
         "-ss", str(start_sec),
+        "-i", input_path,
         "-t", str(duration_sec),
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "18",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-movflags", "+faststart",
+        "-c", "copy",
         output_path,
     ]
     logger.info(f"Running: {' '.join(cmd)}")
