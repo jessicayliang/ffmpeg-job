@@ -34,7 +34,7 @@ def download_video(file_id: str, dest_path: str, user_token: str) -> None:
     service = _get_drive_service(user_token)
 
     try:
-        meta = service.files().get(fileId=file_id, fields="name,size,mimeType").execute()
+        meta = service.files().get(fileId=file_id, fields="name,size,mimeType",supportsAllDrives=True).execute()
         logger.info(f"File: name={meta.get('name')!r} size={meta.get('size')} mimeType={meta.get('mimeType')}")
     except Exception as e:
         raise PermissionError(
@@ -42,9 +42,9 @@ def download_video(file_id: str, dest_path: str, user_token: str) -> None:
             f"Make sure you have access to this file in your Google Drive. ({e})"
         )
 
-    request = service.files().get_media(fileId=file_id)
+    request = service.files().get_media(fileId=file_id,supportsAllDrives=True)
     with open(dest_path, "wb") as f:
-        downloader = MediaIoBaseDownload(f, request, chunksize=8 * 1024 * 1024)
+        downloader = MediaIoBaseDownload(f, request, chunksize=32 * 1024 * 1024)
         done = False
         while not done:
             status, done = downloader.next_chunk()

@@ -40,11 +40,15 @@ def run_ffmpeg_clip(input_path: str, output_path: str, start: str, end: str) -> 
 
     cmd = [
         "ffmpeg", "-y",
-        "-ss", str(start_sec),       # Seek to start (fast keyframe seek)
         "-i", input_path,
-        "-t", str(duration_sec),     # Duration (unambiguous across FFmpeg versions)
-        "-c", "copy",                # Stream copy — no re-encode
-        "-avoid_negative_ts", "make_zero",
+        "-ss", str(start_sec),
+        "-t", str(duration_sec),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "18",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
         output_path,
     ]
     logger.info(f"Running: {' '.join(cmd)}")

@@ -28,7 +28,7 @@ def _get_caller_email(request: Request) -> Optional[str]:
     # Verify with Google's tokeninfo endpoint
     try:
         resp = requests.get(
-            "https://oauth2.googleapis.com/tokeninfo",
+            "https://www.googleapis.com/oauth2/v3/userinfo",
             params={"access_token": token},
             timeout=5,
         )
